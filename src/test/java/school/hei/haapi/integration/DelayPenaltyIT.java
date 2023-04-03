@@ -11,6 +11,7 @@ import school.hei.haapi.SentryConf;
 import school.hei.haapi.endpoint.rest.api.PayingApi;
 import school.hei.haapi.endpoint.rest.client.ApiClient;
 import school.hei.haapi.endpoint.rest.client.ApiException;
+import school.hei.haapi.endpoint.rest.model.CreateDelayPenaltyChange;
 import school.hei.haapi.endpoint.rest.model.DelayPenalty;
 import school.hei.haapi.endpoint.rest.security.cognito.CognitoComponent;
 import school.hei.haapi.integration.conf.AbstractContextInitializer;
@@ -21,12 +22,7 @@ import java.time.Instant;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.springframework.boot.test.context.SpringBootTest.WebEnvironment.RANDOM_PORT;
 import static school.hei.haapi.endpoint.rest.model.DelayPenalty.InterestTimerateEnum.DAILY;
-import static school.hei.haapi.integration.conf.TestUtils.BAD_TOKEN;
-import static school.hei.haapi.integration.conf.TestUtils.DELAY_PENALTY_ID;
-import static school.hei.haapi.integration.conf.TestUtils.STUDENT1_TOKEN;
-import static school.hei.haapi.integration.conf.TestUtils.anAvailableRandomPort;
-import static school.hei.haapi.integration.conf.TestUtils.assertThrowsForbiddenException;
-import static school.hei.haapi.integration.conf.TestUtils.setUpCognito;
+import static school.hei.haapi.integration.conf.TestUtils.*;
 
 @SpringBootTest(webEnvironment = RANDOM_PORT)
 @Testcontainers
@@ -52,7 +48,14 @@ public class DelayPenaltyIT {
                 .creationDatetime(Instant.parse("2023-03-30T08:25:25.00Z"));
         return delayPenalty;
     }
-
+    static CreateDelayPenaltyChange toCreate() {
+        CreateDelayPenaltyChange delayPenaltyChange = new CreateDelayPenaltyChange()
+                .graceDelay(5)
+                .interestPercent(2)
+                .interestTimerate(CreateDelayPenaltyChange.InterestTimerateEnum.DAILY)
+                .applicabilityDelayAfterGrace(10);
+        return delayPenaltyChange;
+    }
 
     @BeforeEach
     void setUp() {
@@ -76,6 +79,29 @@ public class DelayPenaltyIT {
 
         assertEquals(delayPenalty(), actual);
     }
+
+
+    @Test
+    void delay_penalty_change_ok() throws ApiException {
+        ApiClient manager1Client = anApiClient(MANAGER1_TOKEN);
+        PayingApi api = new PayingApi(manager1Client);
+
+        DelayPenalty actual = api.createDelayPenaltyChange(toCreate());
+        assertEquals(
+                delayPenalty()
+                        .id(actual.getId())
+                        .creationDatetime(actual.getCreationDatetime()),
+                actual);
+    }
+    @Test
+    void delay_penalty_change_ko() {
+        ApiClient student1Client = anApiClient(STUDENT1_TOKEN);
+        PayingApi api = new PayingApi(student1Client);
+
+        assertThrowsApiException("{\"type\":\"403 FORBIDDEN\",\"message\":\"Access is denied\"}",
+                () -> api.createDelayPenaltyChange(toCreate()));
+    }
+
 
     static class ContextInitializer extends AbstractContextInitializer {
         public static final int SERVER_PORT = anAvailableRandomPort();
